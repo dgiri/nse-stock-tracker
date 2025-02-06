@@ -16,62 +16,74 @@ export async function GET(request) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     Accept: "application/json",
     "Accept-Language": "en-US,en;q=0.9",
+    Origin: "https://finance.yahoo.com",
+    Referer: "https://finance.yahoo.com",
   };
 
   try {
     // Fetch quote data
-    console.log("Fetching quote data for symbol:", symbol);
     const quoteResponse = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
       { headers }
     );
 
     if (!quoteResponse.ok) {
-      console.error("Quote response not OK:", await quoteResponse.text());
       throw new Error("Failed to fetch quote data");
     }
-
     const quoteData = await quoteResponse.json();
 
-    // Fetch company info
-    console.log("Fetching company info");
+    // Fetch company info using search endpoint
     const searchResponse = await fetch(
       `https://query1.finance.yahoo.com/v1/finance/search?q=${symbol}`,
       { headers }
     );
 
     if (!searchResponse.ok) {
-      console.error("Search response not OK:", await searchResponse.text());
-      throw new Error("Failed to fetch company info");
+      throw new Error("Failed to fetch search data");
     }
-
     const searchData = await searchResponse.json();
 
-    // Try to fetch news using a more reliable endpoint
-    let newsData = { items: [] }; // Default empty news
-    try {
-      console.log("Fetching news data");
-      const newsResponse = await fetch(
-        `https://query2.finance.yahoo.com/v1/finance/search?q=${symbol}&type=news`,
-        { headers }
-      );
+    // Fetch supplementary company data
+    const companyResponse = await fetch(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=summaryProfile,defaultKeyStatistics`,
+      { headers }
+    );
 
-      if (newsResponse.ok) {
-        const rawNewsData = await newsResponse.json();
-        newsData = {
-          items: rawNewsData.news || [],
-        };
-      } else {
-        console.log("News fetch failed, continuing with empty news");
-      }
-    } catch (newsError) {
-      console.log("News fetch error, continuing with empty news:", newsError);
+    let companyData = {};
+    if (companyResponse.ok) {
+      const companyResult = await companyResponse.json();
+      companyData =
+        companyResult?.quoteSummary?.result?.[0]?.summaryProfile || {};
+    }
+
+    // Fetch news data
+    const newsResponse = await fetch(
+      `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
+        searchData?.quotes?.[0]?.shortname || symbol
+      )}&news_type=all&type=news`,
+      { headers }
+    );
+
+    let newsData = { news: [] };
+    if (newsResponse.ok) {
+      const newsResult = await newsResponse.json();
+      newsData.news = newsResult.news || [];
     }
 
     return NextResponse.json({
       quote: quoteData,
       search: searchData,
-      news: newsData,
+      profile: {
+        ...companyData,
+        description:
+          companyData.longBusinessSummary ||
+          searchData?.quotes?.[0]?.longBusinessSummary,
+        industry: companyData.industry || searchData?.quotes?.[0]?.industry,
+        sector: companyData.sector,
+        website: companyData.website,
+        employees: companyData.fullTimeEmployees,
+      },
+      news: newsData.news,
     });
   } catch (error) {
     console.error("Error in API route:", error);
