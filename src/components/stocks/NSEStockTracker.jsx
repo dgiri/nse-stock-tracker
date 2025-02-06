@@ -433,10 +433,13 @@ const NSEStockTracker = () => {
                 </div>
               </CardContent>
             </Card>
-            
-            <NewsSection symbol={stockData.companyInfo.symbol} companyName={stockData.companyInfo.name}/>
           </div>
         )}
+        
+        <NewsSection 
+          symbol={stockData?.companyInfo?.symbol} 
+          companyName={stockData?.companyInfo?.name}
+        />
       </div>
     </div>
   );

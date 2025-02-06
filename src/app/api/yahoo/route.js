@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 export async function GET(request) {
   const searchParams = request.nextUrl.searchParams;
   const symbol = searchParams.get("symbol");
+  const type = searchParams.get("type");
+  const q = searchParams.get("q");
 
-  if (!symbol) {
+  if (!symbol && type !== "news") {
     return NextResponse.json(
       { error: "Symbol parameter is required" },
       { status: 400 }
@@ -21,6 +23,68 @@ export async function GET(request) {
   };
 
   try {
+    // If type is news, focus on fetching news from multiple sources
+    if (type === "news") {
+      const newsPromises = [];
+
+      // Add symbol-specific news search
+      if (symbol) {
+        newsPromises.push(
+          fetch(
+            `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
+              symbol
+            )}&news_type=all&type=news&count=20`,
+            { headers }
+          )
+        );
+      }
+
+      // Add query-specific news search
+      if (q) {
+        newsPromises.push(
+          fetch(
+            `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
+              q
+            )}&news_type=all&type=news&count=20`,
+            { headers }
+          )
+        );
+      }
+
+      // Add market news search
+      newsPromises.push(
+        fetch(
+          `https://query2.finance.yahoo.com/v1/finance/search?q=Indian%20Stock%20Market&news_type=all&type=news&count=20`,
+          { headers }
+        )
+      );
+
+      const newsResponses = await Promise.all(newsPromises);
+      const newsResults = await Promise.all(
+        newsResponses.map((response) => response.json())
+      );
+
+      // Combine all news and remove duplicates
+      const allNews = newsResults.reduce((acc, result) => {
+        return [...acc, ...(result.news || [])];
+      }, []);
+
+      // Remove duplicates based on uuid
+      const uniqueNews = Array.from(
+        new Map(allNews.map((item) => [item.uuid, item])).values()
+      );
+
+      // Sort by publish time (most recent first)
+      const sortedNews = uniqueNews.sort(
+        (a, b) => b.providerPublishTime - a.providerPublishTime
+      );
+
+      return NextResponse.json({
+        news: sortedNews,
+        search: { news: sortedNews },
+      });
+    }
+
     // Fetch quote data with historical data (21 days)
     const quoteResponse = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=21d&interval=1d&includePrePost=false&events=div%7Csplit%7Cearn`,
@@ -111,20 +175,6 @@ export async function GET(request) {
         companyResult?.quoteSummary?.result?.[0]?.summaryProfile || {};
     }
 
-    // Fetch news data
-    const newsResponse = await fetch(
-      `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
-        searchData?.quotes?.[0]?.shortname || symbol
-      )}&news_type=all&type=news`,
-      { headers }
-    );
-
-    let newsData = { news: [] };
-    if (newsResponse.ok) {
-      const newsResult = await newsResponse.json();
-      newsData.news = newsResult.news || [];
-    }
-
     return NextResponse.json({
       quote: {
         chart: {
@@ -156,7 +206,6 @@ export async function GET(request) {
         employees: companyData.fullTimeEmployees,
       },
       historical: historicalData,
-      news: newsData.news,
     });
   } catch (error) {
     console.error("Error in API route:", error);

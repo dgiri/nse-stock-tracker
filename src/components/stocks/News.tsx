@@ -16,8 +16,8 @@ interface NewsItem {
 }
 
 interface NewsSectionProps {
-  symbol: string;
-  companyName: string;
+  symbol?: string;
+  companyName?: string;
 }
 
 const NewsSection: React.FC<NewsSectionProps> = ({ symbol, companyName }) => {
@@ -26,26 +26,56 @@ const NewsSection: React.FC<NewsSectionProps> = ({ symbol, companyName }) => {
   const [error, setError] = useState<string>("");
 
   const fetchNews = useCallback(async (): Promise<void> => {
-    if (!symbol) return;
-
     setLoading(true);
     setError("");
 
     try {
-      const searchTerm = encodeURIComponent(companyName || symbol);
-      const response = await fetch(
-        `/api/yahoo?symbol=${symbol}&type=news&q=${searchTerm}`
-      );
-      const data = await response.json();
+      let url = "/api/yahoo?type=news";
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch news");
+      if (symbol) {
+        url += `&symbol=${symbol}`;
+        if (companyName) {
+          url += `&q=${encodeURIComponent(companyName)}`;
+        }
+      } else {
+        url += "&symbol=^NSEI";
       }
 
-      setNews(data.news || []);
+      console.log("Fetching news from URL:", url);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      console.log("Raw API Response:", data);
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch news: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const mainNews = data.news || [];
+      const searchNews = data.search?.news || [];
+
+      console.log("Main news count:", mainNews.length);
+      console.log("Search news count:", searchNews.length);
+
+      const combinedNews = [...mainNews, ...searchNews];
+
+      const uniqueNews = Array.from(
+        new Map(combinedNews.map((item) => [item.uuid, item])).values()
+      );
+
+      console.log("Final unique news count:", uniqueNews.length);
+
+      setNews(uniqueNews);
     } catch (err) {
       console.error("Error fetching news:", err);
-      setError("Failed to fetch news. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch news. Please try again."
+      );
     } finally {
       setLoading(false);
     }
