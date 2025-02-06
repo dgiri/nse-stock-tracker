@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import NewsSection from './News';
+import { useToast } from "@/components/ui/use-toast"
 
 const NSEStockTracker = () => {
+  const { toast } = useToast();
   const [symbol, setSymbol] = useState('');
   const [watchlistSymbol, setWatchlistSymbol] = useState('');
   const [stockData, setStockData] = useState(null);
@@ -39,7 +42,24 @@ const NSEStockTracker = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch data');
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: data.error || "Failed to fetch stock data",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check if the data is empty or doesn't contain required fields
+      if (!data.quote?.chart?.result?.[0]?.meta?.regularMarketPrice) {
+        toast({
+          variant: "destructive",
+          title: "Stock Not Found",
+          description: `No stock found with symbol "${stockSymbol}". Please check the symbol and try again.`,
+        });
+        setLoading(false);
+        return;
       }
 
       // Process the quote data
@@ -47,8 +67,21 @@ const NSEStockTracker = () => {
       const meta = quote?.meta || {};
       const price = meta.regularMarketPrice;
       const previousClose = meta.previousClose;
+
+      console.log("Quote data:", quote);
+      console.log("Meta data:", meta);
+      console.log("Price:", price);
+      console.log("Previous Close:", previousClose);
+
       const priceChange = price - previousClose;
       const priceChangePercent = (priceChange / previousClose) * 100;
+
+      // Move debug logs after calculations
+      console.log('Raw meta data:', meta);
+      console.log('Current price:', price);
+      console.log('Previous close:', previousClose);
+      console.log('Price change:', priceChange);
+      console.log('Price change percent:', priceChangePercent);
 
       const processedData = {
         companyInfo: {
@@ -91,8 +124,11 @@ const NSEStockTracker = () => {
 
       setStockData(processedData);
     } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Failed to fetch stock data. Please try again.');
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred",
+      });
     } finally {
       setLoading(false);
     }
@@ -398,43 +434,7 @@ const NSEStockTracker = () => {
               </CardContent>
             </Card>
             
-            {stockData.news && stockData.news.length > 0 && (
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Newspaper className="w-5 h-5" />
-                    Recent News & Events
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-4">
-                    {stockData.news.map((item, index) => (
-                      <li key={index} className="border-b pb-4 last:border-b-0">
-                        <h4 className="font-semibold mb-1">{item.title}</h4>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <span>{new Date(item.providerPublishTime * 1000).toLocaleDateString()}</span>
-                          <span>•</span>
-                          <span>{item.publisher}</span>
-                          {item.link && (
-                            <>
-                              <span>•</span>
-                              <a 
-                                href={item.link} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline"
-                              >
-                                Read More
-                              </a>
-                            </>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
+            <NewsSection symbol={stockData.companyInfo.symbol} companyName={stockData.companyInfo.name}/>
           </div>
         )}
       </div>

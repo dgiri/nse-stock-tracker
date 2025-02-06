@@ -23,14 +23,52 @@ export async function GET(request) {
   try {
     // Fetch quote data with historical data (21 days)
     const quoteResponse = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=21d&interval=1d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=21d&interval=1d&includePrePost=false&events=div%7Csplit%7Cearn`,
       { headers }
     );
 
     if (!quoteResponse.ok) {
-      throw new Error("Failed to fetch quote data");
+      const errorMessage = await quoteResponse.text();
+      return NextResponse.json(
+        {
+          error: "Failed to fetch stock data",
+          details: errorMessage,
+        },
+        { status: 400 }
+      );
     }
     const quoteData = await quoteResponse.json();
+    // console.log("Yahoo API response:", quoteData?.chart?.result?.[0]?.meta);
+
+    // Add a separate request for current quote data
+    const currentQuoteResponse = await fetch(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=price`,
+      { headers }
+    );
+
+    // let previousClose;
+    if (currentQuoteResponse.ok) {
+      // const currentQuoteData = await currentQuoteResponse.json();
+      // console.log(
+      //   "Current quote data:",
+      //   currentQuoteData?.quoteSummary?.result?.[0]?.price
+      // );
+      // previousClose =
+      //   currentQuoteData?.quoteSummary?.result?.[0]?.price
+      //     ?.regularMarketPreviousClose?.raw;
+      // console.log("Previous close from API:", previousClose);
+    }
+
+    // Extract quote and meta data
+    const quote = quoteData?.chart?.result?.[0];
+    const meta = quote?.meta || {};
+    // const timestamps = quote?.timestamp || [];
+    const prices = quote?.indicators?.quote?.[0]?.close || [];
+
+    // Get previous close from historical data
+    const previousCloseHistorical = prices[prices.length - 2] || null; // Second to last price
+
+    // console.log("Previous close from historical:", previousCloseHistorical);
 
     // Process historical data
     const historicalData = {
@@ -88,7 +126,24 @@ export async function GET(request) {
     }
 
     return NextResponse.json({
-      quote: quoteData,
+      quote: {
+        chart: {
+          result: [
+            {
+              meta: {
+                regularMarketPrice: meta.regularMarketPrice,
+                previousClose: previousCloseHistorical, // Use historical data for previous close
+                regularMarketTime: meta.regularMarketTime,
+                regularMarketDayHigh: meta.regularMarketDayHigh,
+                regularMarketDayLow: meta.regularMarketDayLow,
+                fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+                fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+                regularMarketVolume: meta.regularMarketVolume,
+              },
+            },
+          ],
+        },
+      },
       search: searchData,
       profile: {
         ...companyData,
