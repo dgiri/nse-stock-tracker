@@ -21,9 +21,9 @@ export async function GET(request) {
   };
 
   try {
-    // Fetch quote data
+    // Fetch quote data with historical data (21 days)
     const quoteResponse = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=21d&interval=1d`,
       { headers }
     );
 
@@ -31,6 +31,23 @@ export async function GET(request) {
       throw new Error("Failed to fetch quote data");
     }
     const quoteData = await quoteResponse.json();
+
+    // Process historical data
+    const historicalData = {
+      dates: [],
+      prices: [],
+    };
+
+    if (quoteData?.chart?.result?.[0]) {
+      const timestamps = quoteData.chart.result[0].timestamp || [];
+      const closePrices =
+        quoteData.chart.result[0].indicators.quote[0].close || [];
+
+      historicalData.dates = timestamps.map(
+        (ts) => new Date(ts * 1000).toISOString().split("T")[0]
+      );
+      historicalData.prices = closePrices;
+    }
 
     // Fetch company info using search endpoint
     const searchResponse = await fetch(
@@ -83,6 +100,7 @@ export async function GET(request) {
         website: companyData.website,
         employees: companyData.fullTimeEmployees,
       },
+      historical: historicalData,
       news: newsData.news,
     });
   } catch (error) {

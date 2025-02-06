@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const NSEStockTracker = () => {
   const [symbol, setSymbol] = useState('');
@@ -73,6 +74,12 @@ const NSEStockTracker = () => {
           volume: meta.regularMarketVolume,
           value: "₹",
           lastUpdateTime: new Date(meta.regularMarketTime * 1000).toLocaleTimeString()
+        },
+        historical: {
+          data: data.historical.dates.map((date, index) => ({
+            date: date,
+            price: data.historical.prices[index]
+          })).filter(item => item.price !== null)
         },
         news: data.news?.map(item => ({
           title: item.title,
@@ -344,6 +351,53 @@ const NSEStockTracker = () => {
               </CardContent>
             </Card>
 
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  Historical Price Chart (21 Days)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={stockData.historical.data}
+                      margin={{
+                        top: 5,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 12 }}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis 
+                        domain={['auto', 'auto']}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => `₹${value.toFixed(2)}`}
+                      />
+                      <Tooltip 
+                        formatter={(value) => [`₹${value.toFixed(2)}`, 'Price']}
+                        labelFormatter={(label) => `Date: ${label}`}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="price"
+                        stroke="#2563eb"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+            
             {stockData.news && stockData.news.length > 0 && (
               <Card className="md:col-span-2">
                 <CardHeader>
